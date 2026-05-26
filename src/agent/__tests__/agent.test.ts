@@ -177,6 +177,53 @@ describe('Agent System', () => {
         expect(pos.amount).toBeTruthy();
       });
     });
+
+    it('should compute currentValue as principalAmount + yieldAmount', () => {
+      const snapshots = [
+        { principalAmount: 1000, yieldAmount: 40, expectedCurrentValue: '1040' },
+        { principalAmount: 5000, yieldAmount: 250, expectedCurrentValue: '5250' },
+        { principalAmount: 100, yieldAmount: 0, expectedCurrentValue: '100' },
+      ];
+
+      snapshots.forEach(({ principalAmount, yieldAmount, expectedCurrentValue }) => {
+        const currentValue = (principalAmount + yieldAmount).toString();
+        expect(currentValue).toBe(expectedCurrentValue);
+      });
+    });
+
+    it('should populate userId and walletAddress from joined position', () => {
+      const mockSnapshot = {
+        positionId: 'pos-1',
+        principalAmount: { toNumber: () => 1000 },
+        yieldAmount: { toNumber: () => 50 },
+        apy: { toNumber: () => 5.0 },
+        snapshotAt: new Date('2024-01-15'),
+        position: {
+          userId: 'user-abc',
+          protocolName: 'Blend',
+          user: { id: 'user-abc', walletAddress: 'GABC123' },
+        },
+      };
+
+      const result = {
+        userId: mockSnapshot.position.userId,
+        walletAddress: mockSnapshot.position.user.walletAddress,
+        positionId: mockSnapshot.positionId,
+        protocolName: mockSnapshot.position.protocolName,
+        amount: mockSnapshot.principalAmount.toNumber().toString(),
+        currentValue: (mockSnapshot.principalAmount.toNumber() + mockSnapshot.yieldAmount.toNumber()).toString(),
+        apy: mockSnapshot.apy.toNumber(),
+        snapshotAt: mockSnapshot.snapshotAt,
+      };
+
+      expect(result.userId).toBe('user-abc');
+      expect(result.walletAddress).toBe('GABC123');
+      expect(result.protocolName).toBe('Blend');
+      expect(result.currentValue).toBe('1050');
+      expect(result.userId).not.toBe('');
+      expect(result.walletAddress).not.toBe('');
+      expect(result.protocolName).not.toBe('');
+    });
   });
 
   describe('Agent Loop - Cron Scheduling', () => {

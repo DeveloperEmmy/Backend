@@ -110,18 +110,27 @@ export async function getPositionHistory(
           gte: cutoffDate,
         },
       },
+      include: {
+        position: {
+          include: {
+            user: {
+              select: { id: true, walletAddress: true },
+            },
+          },
+        },
+      },
       orderBy: {
         snapshotAt: 'asc',
       },
     });
 
     return snapshots.map((snapshot: any) => ({
-      userId: '', // Would need to join with position
-      walletAddress: '',
+      userId: snapshot.position.userId,
+      walletAddress: snapshot.position.user.walletAddress,
       positionId,
-      protocolName: '', // Would need to join with position
+      protocolName: snapshot.position.protocolName,
       amount: snapshot.principalAmount.toString(),
-      currentValue: snapshot.principalAmount.toString(), // Simplified
+      currentValue: (snapshot.principalAmount.toNumber() + snapshot.yieldAmount.toNumber()).toString(),
       apy: snapshot.apy.toNumber(),
       snapshotAt: snapshot.snapshotAt,
     }));
@@ -172,6 +181,15 @@ export async function getLatestUserBalance(positionId: string): Promise<UserBala
       where: {
         positionId,
       },
+      include: {
+        position: {
+          include: {
+            user: {
+              select: { id: true, walletAddress: true },
+            },
+          },
+        },
+      },
       orderBy: {
         snapshotAt: 'desc',
       },
@@ -182,12 +200,12 @@ export async function getLatestUserBalance(positionId: string): Promise<UserBala
     }
 
     return {
-      userId: '',
-      walletAddress: '',
+      userId: snapshot.position.userId,
+      walletAddress: snapshot.position.user.walletAddress,
       positionId,
-      protocolName: '',
+      protocolName: snapshot.position.protocolName,
       amount: snapshot.principalAmount.toString(),
-      currentValue: snapshot.principalAmount.toString(),
+      currentValue: (snapshot.principalAmount.toNumber() + snapshot.yieldAmount.toNumber()).toString(),
       apy: snapshot.apy.toNumber(),
       snapshotAt: snapshot.snapshotAt,
     };
