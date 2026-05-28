@@ -85,14 +85,18 @@ describe('Vault event recovery integration', () => {
       dlqRows.push(row)
       return row
     })
-    mockPrisma.deadLetterEvent.findMany.mockImplementation(async (args: any) => {
-      if (args?.where?.status?.in) {
-        const allowed: string[] = args.where.status.in
-        return dlqRows.filter((r) => allowed.includes(r.status))
+    mockPrisma.deadLetterEvent.findMany.mockImplementation(
+      async (args: any) => {
+        if (args?.where?.status?.in) {
+          const allowed: string[] = args.where.status.in
+          return dlqRows.filter((r) => allowed.includes(r.status))
+        }
+        return dlqRows
       }
-      return dlqRows
-    })
-    mockPrisma.deadLetterEvent.count.mockImplementation(async () => dlqRows.length)
+    )
+    mockPrisma.deadLetterEvent.count.mockImplementation(
+      async () => dlqRows.length
+    )
     mockPrisma.deadLetterEvent.update.mockImplementation(async (args: any) => {
       const row = dlqRows.find((r) => r.id === args.where.id)
       if (row) Object.assign(row, args.data, { updatedAt: new Date() })

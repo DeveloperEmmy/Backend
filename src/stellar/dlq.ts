@@ -29,7 +29,10 @@ export interface DeadLetterEvent {
   updatedAt: string
 }
 
-const LEGACY_DLQ_FILE = path.join(__dirname, '../../logs/dead_letter_queue.json')
+const LEGACY_DLQ_FILE = path.join(
+  __dirname,
+  '../../logs/dead_letter_queue.json'
+)
 
 const SIZE_ALERT_THRESHOLD = 50
 
@@ -121,15 +124,15 @@ export class DeadLetterQueue {
     })
 
     const size = await this.getSize()
-    logger.warn(
-      `[DLQ] Event added to DLQ. Size: ${size}. Tx: ${row.txHash}`,
-    )
+    logger.warn(`[DLQ] Event added to DLQ. Size: ${size}. Tx: ${row.txHash}`)
     this.checkSizeAlert(size)
     return toDomain(row)
   }
 
   static async getAll(): Promise<DeadLetterEvent[]> {
-    const rows: PrismaDeadLetterRow[] = await (db as any).deadLetterEvent.findMany({
+    const rows: PrismaDeadLetterRow[] = await (
+      db as any
+    ).deadLetterEvent.findMany({
       orderBy: { createdAt: 'asc' },
     })
     return rows.map(toDomain)
@@ -140,9 +143,11 @@ export class DeadLetterQueue {
   }
 
   static async retryAll(
-    retryFn: (event: any) => Promise<void>,
+    retryFn: (event: any) => Promise<void>
   ): Promise<{ resolved: number; failed: number }> {
-    const rows: PrismaDeadLetterRow[] = await (db as any).deadLetterEvent.findMany({
+    const rows: PrismaDeadLetterRow[] = await (
+      db as any
+    ).deadLetterEvent.findMany({
       where: { status: { in: ['PENDING', 'RETRIED'] } },
       orderBy: { createdAt: 'asc' },
     })
@@ -167,13 +172,13 @@ export class DeadLetterQueue {
         failed++
         logger.error(
           `[DLQ Retry] Failed to retry event ${row.id}:`,
-          error instanceof Error ? error.message : 'Unknown error',
+          error instanceof Error ? error.message : 'Unknown error'
         )
       }
     }
 
     logger.info(
-      `[DLQ Retry] Finished. Resolved: ${resolved}, Failed: ${failed}`,
+      `[DLQ Retry] Finished. Resolved: ${resolved}, Failed: ${failed}`
     )
     return { resolved, failed }
   }
@@ -197,7 +202,7 @@ export class DeadLetterQueue {
    * file to `*.migrated` so subsequent boots skip the work.
    */
   static async migrateFromLegacyFile(
-    filePath: string = LEGACY_DLQ_FILE,
+    filePath: string = LEGACY_DLQ_FILE
   ): Promise<{ imported: number; skipped: number }> {
     if (!fs.existsSync(filePath)) {
       return { imported: 0, skipped: 0 }
@@ -210,7 +215,7 @@ export class DeadLetterQueue {
     } catch (error) {
       logger.error(
         '[DLQ] Failed to read legacy DLQ file during migration:',
-        error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.message : 'Unknown error'
       )
       return { imported: 0, skipped: 0 }
     }
@@ -253,12 +258,12 @@ export class DeadLetterQueue {
     } catch (error) {
       logger.warn(
         '[DLQ] Imported legacy DLQ rows but could not rename source file:',
-        error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.message : 'Unknown error'
       )
     }
 
     logger.info(
-      `[DLQ] Legacy file migration complete. Imported: ${imported}, Skipped (duplicate): ${skipped}`,
+      `[DLQ] Legacy file migration complete. Imported: ${imported}, Skipped (duplicate): ${skipped}`
     )
     return { imported, skipped }
   }
@@ -266,7 +271,7 @@ export class DeadLetterQueue {
   private static checkSizeAlert(size: number): void {
     if (size >= SIZE_ALERT_THRESHOLD) {
       logger.error(
-        `[DLQ ALERT] Dead-letter queue size is critically high: ${size} events. Manual intervention required.`,
+        `[DLQ ALERT] Dead-letter queue size is critically high: ${size} events. Manual intervention required.`
       )
     }
   }
