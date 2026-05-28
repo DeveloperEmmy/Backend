@@ -1,6 +1,8 @@
 import express from 'express'
+import cors, { type CorsOptions } from 'cors'
 import helmet from 'helmet'
-import { config } from './config/env'
+import { config, validateProductionConfig } from './config/env'
+import { markReady } from './config/readiness'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/logger'
 import { rateLimiter, authRateLimiter } from './middleware/rateLimiter'
@@ -10,6 +12,7 @@ import { startAgentLoop } from './agent/loop'
 import { connectDb } from './db'
 import { scheduleSessionCleanup } from './jobs/sessionCleanup'
 import { startEventListener } from './stellar/events'
+import { DeadLetterQueue } from './stellar/dlq'
 import healthRouter from './routes/health'
 import agentRouter from './routes/agent'
 import authRouter from './routes/auth'
@@ -51,8 +54,22 @@ const app = express()
 // Trust proxy — required for correct client IP behind Nginx / Cloudflare / Heroku
 app.set('trust proxy', 1)
 
-// Security headers
+// ── Security and parsing middleware ────────────────────────────────────────
 app.use(helmet())
+
+const corsOptions: CorsOptions =
+  config.security.cors.origins === '*'
+    ? { origin: '*' }
+    : { origin: config.security.cors.origins }
+app.use(cors(corsOptions))
+
+app.use(express.json({ limit: config.security.bodyLimits.json }))
+app.use(
+  express.urlencoded({
+    limit: config.security.bodyLimits.urlencoded,
+    extended: false,
+  }),
+)
 
 // CORS — must come before body parsers so pre-flight OPTIONS is handled
 app.use(corsMiddleware)
@@ -110,7 +127,6 @@ app.use(payloadSizeErrorHandler)
 
 // Generic error handler — must always be last
 app.use(errorHandler)
-
 // ── Startup sequence ──────────────────────────────────────────────────────────
 //
 // The HTTP server does NOT start accepting connections until every critical
