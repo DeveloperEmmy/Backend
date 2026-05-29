@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { JwtAdapter } from '../config';
 import db from '../db';
+import { logger } from '../utils/logger';
 
 export class AuthMiddleware {
   /**
@@ -65,7 +66,7 @@ export class AuthMiddleware {
 
       next();
     } catch (error) {
-      console.error('[Auth] Middleware error:', error);
+      logger.error('[Auth] Middleware error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   };
