@@ -4,8 +4,7 @@ import helmet from 'helmet'
 import { config } from './config/env'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/logger'
-import { rateLimiter, authRateLimiter } from './middleware/rateLimiter'
-
+import { rateLimiter, authRateLimiter, adminRateLimiter, internalRateLimiter, trustedIpBypass } from './middleware/rateLimiter'
 import { logger } from './utils/logger'
 import { startAgentLoop, stopAgentLoop } from './agent/loop'
 import { connectDb } from './db'
@@ -68,6 +67,8 @@ app.use(urlencodedBodyParser)
 
 // Logging + rate limiting
 app.use(requestLogger)
+// Trusted-IP / service-token bypass must run before any rate limiter
+app.use(trustedIpBypass)
 app.use(rateLimiter)
 
 // ── Readiness / liveness probes ───────────────────────────────────────────────
@@ -106,7 +107,7 @@ app.get('/health/ready', (_req, res) => {
 // ── Application routes ────────────────────────────────────────────────────────
 
 app.use('/health', healthRouter)
-app.use('/api/agent', agentRouter)
+app.use('/api/agent', internalRateLimiter, agentRouter)
 app.use('/api/auth', authRateLimiter, authRouter)
 app.use('/api/whatsapp', whatsappRouter)
 app.use('/api/portfolio', portfolioRouter)
@@ -116,7 +117,9 @@ app.use('/api/deposit', depositRouter)
 app.use('/api/withdraw', withdrawRouter)
 app.use('/api/vault', vaultRouter)
 app.use('/api/analytics', analyticsRouter)
-app.use('/api/admin', adminRouter)
+
+// Admin routes (protected, strictest rate limit)
+app.use('/api/admin', adminRateLimiter, adminRouter)
 
 // 413 handler — must be after body parsers, before generic error handler
 app.use(payloadSizeErrorHandler)
