@@ -27,7 +27,12 @@ router.post('/webhook', async (req: Request, res: Response) => {
     return res.status(403).send('Forbidden: TWILIO_AUTH_TOKEN not configured')
   }
 
-  const signature = req.header('x-twilio-signature') ?? ''
+  const signature = req.header('x-twilio-signature')
+
+  if (!signature) {
+    return res.status(403).send('Forbidden: x-twilio-signature header is required')
+  }
+
   const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`
   const isValid = validateRequest(authToken, signature, url, req.body)
 

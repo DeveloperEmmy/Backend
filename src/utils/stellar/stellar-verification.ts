@@ -1,6 +1,18 @@
 import { config } from '../../config/env';
 import { Keypair } from '@stellar/stellar-sdk';
 
+export interface NonceEntry {
+  nonce: string;
+  expiresAt: number; // ms since epoch
+  stellarPubKey: string;
+}
+
+/**
+ * In-memory nonce store. Exported as _nonceStoreForTests so integration tests
+ * can inspect and pre-populate nonces without hitting the database.
+ */
+export const _nonceStoreForTests = new Map<string, NonceEntry>();
+
 export default class StellarVerification {
     /**
      * Verify a Stellar signature.
@@ -19,6 +31,16 @@ export default class StellarVerification {
             return keypair.verify(messageBytes, signatureBytes);
         } catch {
             return false;
+        }
+    }
+
+    /** Remove all expired nonces (lazy cleanup called from challenge). */
+    purgeExpiredNonces(): void {
+        const now = Date.now();
+        for (const [key, entry] of _nonceStoreForTests.entries()) {
+            if (entry.expiresAt <= now) {
+                _nonceStoreForTests.delete(key);
+            }
         }
     }
 

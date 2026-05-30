@@ -35,19 +35,14 @@ export async function challenge(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Purge expired nonces (lazy cleanup — harmless if it fails)
-  db.authNonce
-    .deleteMany({ where: { expiresAt: { lt: new Date() } } })
-    .catch(() => {});
-
   const nonce = `nw-auth-${randomBytes(32).toString('hex')}`;
   const expiresAt = new Date(Date.now() + config.jwt.nonce_ttl_ms);
 
-  // Upsert so a second challenge for the same key overwrites the old nonce
+  // Upsert so a second challenge call overwrites the previous nonce
   await db.authNonce.upsert({
     where: { stellarPubKey },
-    create: { stellarPubKey, nonce, expiresAt },
     update: { nonce, expiresAt },
+    create: { stellarPubKey, nonce, expiresAt },
   });
 
   logger.info(`[Auth] Challenge issued for ${stellarPubKey}`);
@@ -83,7 +78,7 @@ export async function verify(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // 1. Look up nonce
+  // 1. Look up nonce in DB
   const stored = await db.authNonce.findUnique({ where: { stellarPubKey } });
   if (!stored) {
     res.status(401).json({ error: 'No active challenge for this public key' });
@@ -92,7 +87,7 @@ export async function verify(req: Request, res: Response): Promise<void> {
 
   // 2. Check nonce expiry
   if (stored.expiresAt <= new Date()) {
-    await db.authNonce.delete({ where: { stellarPubKey } }).catch(() => {});
+    await db.authNonce.delete({ where: { stellarPubKey } });
     res.status(401).json({ error: 'Challenge nonce has expired' });
     return;
   }
@@ -109,7 +104,7 @@ export async function verify(req: Request, res: Response): Promise<void> {
   }
 
   // 4. Consume nonce — prevents replay attacks
-  await db.authNonce.delete({ where: { stellarPubKey } }).catch(() => {});
+  await db.authNonce.delete({ where: { stellarPubKey } });
 
   const network = stellarVerification.resolveNetwork();
 
