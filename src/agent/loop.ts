@@ -14,7 +14,9 @@ import {
   updateAgentStatus,
   recordRebalanceCheck,
   recordRebalanceTriggered,
-  recordDbOperation
+  recordDbOperation,
+  recordBackgroundJob,
+  recordExternalServiceError
 } from '../utils/metrics';
 
 let isRunning = false;
@@ -134,6 +136,7 @@ async function rebalanceCheckJob(): Promise<void> {
     // Record Prometheus metrics
     recordRebalanceCheck('success');
     recordDbOperation('rebalance_check', duration / 1000);
+    recordBackgroundJob('rebalance_check', 'success', duration / 1000);
 
     logger.info(`${jobName} completed`, {
       duration,
@@ -155,6 +158,7 @@ async function rebalanceCheckJob(): Promise<void> {
     // Record Prometheus metrics
     recordRebalanceCheck('failed');
     recordDbOperation('rebalance_check', duration / 1000);
+    recordBackgroundJob('rebalance_check', 'failed', duration / 1000);
 
     await logAgentAction('ANALYZE', 'FAILED', {
       input: { correlationId },
@@ -198,6 +202,7 @@ async function snapshotJob(): Promise<void> {
     const duration = Date.now() - startTime;
     // Record Prometheus metrics
     recordDbOperation('snapshot_job', duration / 1000);
+    recordBackgroundJob('snapshot', 'success', duration / 1000);
     logger.info(`${jobName} scheduled`, { duration });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -208,6 +213,7 @@ async function snapshotJob(): Promise<void> {
     });
     // Record Prometheus metrics
     recordDbOperation('snapshot_job', duration / 1000);
+    recordBackgroundJob('snapshot', 'failed', duration / 1000);
   }
   });
 }
@@ -254,10 +260,13 @@ export async function startAgentLoop(): Promise<void> {
       try {
         logger.info('Daily protocol scan started', { correlationId });
         updateAgentHeartbeat();
+        const scanStart = Date.now();
         const protocols = await scanAllProtocols();
+        const scanDuration = (Date.now() - scanStart) / 1000;
         await logAgentAction('SCAN', 'SUCCESS', {
           input: { correlationId, protocolsScanned: protocols.length },
         });
+        recordBackgroundJob('protocol_scan', 'success', scanDuration);
         logger.info('Daily protocol scan complete', {
           correlationId,
           protocolsScanned: protocols.length,
@@ -267,6 +276,7 @@ export async function startAgentLoop(): Promise<void> {
           correlationId,
           error: error instanceof Error ? error.message : 'Unknown error',
         });
+        recordBackgroundJob('protocol_scan', 'failed', 0);
         await logAgentAction('SCAN', 'FAILED', {
           input: { correlationId },
           error: error instanceof Error ? error.message : 'Unknown error',
