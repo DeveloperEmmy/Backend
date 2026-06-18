@@ -2,6 +2,7 @@ import { type Server } from 'node:http'
 import express from 'express'
 import { config } from './config/env'
 import { errorHandler } from './middleware/errorHandler'
+import { correlationIdMiddleware } from './middleware/correlationId'
 import { requestLogger } from './middleware/logger'
 import { rateLimiter, authRateLimiter, adminRateLimiter, internalRateLimiter, webhookRateLimiter, trustedIpBypass } from './middleware/rateLimiter'
 import { configureTrustProxy, securityHeaders } from './middleware/security'
@@ -66,6 +67,9 @@ app.use(corsMiddleware)
 // Body parsers with size limits (100 kb default, see config.security.bodySizeLimit)
 app.use(jsonBodyParser)
 app.use(urlencodedBodyParser)
+
+// Request correlation ID — must run before requestLogger
+app.use(correlationIdMiddleware)
 
 // Logging + rate limiting
 app.use(requestLogger)

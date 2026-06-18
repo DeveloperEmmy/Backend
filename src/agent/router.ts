@@ -3,6 +3,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { getCorrelationId } from '../utils/correlation';
 import { ProtocolComparison, RebalanceDetails, RebalanceThresholds } from './types';
 import { scanAllProtocols, getCurrentOnChainApy } from './scanner';
 import { triggerRebalance as submitRebalance } from '../stellar/contract';
@@ -312,6 +313,15 @@ export async function logAgentAction(
   userId?: string,
   positionId?: string,
 ): Promise<void> {
+  const correlationId = getCorrelationId();
+  const inputWithCorrelation =
+    data?.input || correlationId
+      ? {
+          ...(typeof data?.input === 'object' && data.input !== null ? data.input : {}),
+          ...(correlationId ? { correlationId } : {}),
+        }
+      : undefined;
+
   try {
     await db.agentLog.create({
       data: {
@@ -319,7 +329,7 @@ export async function logAgentAction(
         positionId: positionId ?? null,
         action: action as any,
         status: status as any,
-        inputData: data?.input ? JSON.stringify(data.input) : undefined,
+        inputData: inputWithCorrelation ? JSON.stringify(inputWithCorrelation) : data?.input ? JSON.stringify(data.input) : undefined,
         outputData: data?.output ? JSON.stringify(data.output) : undefined,
         reasoning: data?.reasoning as string | undefined,
         errorMessage: data?.error as string | undefined,

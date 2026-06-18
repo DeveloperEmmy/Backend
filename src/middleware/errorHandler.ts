@@ -7,14 +7,18 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ) {
+  const requestId = req.correlationId
+
   logger.error(`Unhandled error: ${err.message}`, {
+    correlationId: requestId,
     stack: err.stack,
     path: req.path,
-    method: req.method
+    method: req.method,
   })
 
   res.status(500).json({
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    requestId,
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   })
 }

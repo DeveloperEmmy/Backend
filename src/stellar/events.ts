@@ -7,6 +7,7 @@ import { ContractEvent, DepositEvent, WithdrawEvent, RebalanceEvent, EventMetric
 import { logger } from '../utils/logger';
 import { config } from '../config';
 import { DeadLetterQueue } from './dlq';
+import { generateCorrelationId, runWithCorrelationIdAsync } from '../utils/correlation';
 import {
   ContractEventSchema,
   DepositEventSchema,
@@ -341,9 +342,14 @@ async function handleRebalanceEvent(rebalanceData: RebalanceEvent, event: Contra
  * Handle contract event with persistence, idempotency, and validation (Issue #53)
  */
 export async function handleEvent(event: ContractEvent, tx: any = db): Promise<void> {
-  const startTime = Date.now();
-  try {
-    logger.info(`[Event] ${event.type} detected at ledger ${event.ledger}, tx: ${event.txHash}`);
+  const correlationId = generateCorrelationId();
+  return runWithCorrelationIdAsync(correlationId, async () => {
+    const eventWithCorrelation = { ...event, correlationId };
+    const startTime = Date.now();
+    try {
+      logger.info(`[Event] ${event.type} detected at ledger ${event.ledger}, tx: ${event.txHash}`, {
+        correlationId,
+      });
 
     // Issue #53: Event validation
     ContractEventSchema.parse(event);
@@ -409,7 +415,7 @@ export async function handleEvent(event: ContractEvent, tx: any = db): Promise<v
     recordEventProcessed(event.type);
     const duration = (Date.now() - startTime) / 1000;
     recordEventDuration(event.type, duration);
-    logger.info(`[Event] Successfully processed ${event.type} event`);
+    logger.info(`[Event] Successfully processed ${event.type} event`, { correlationId });
   } catch (error) {
     recordError();
     // Record Prometheus metrics for failure
@@ -418,11 +424,15 @@ export async function handleEvent(event: ContractEvent, tx: any = db): Promise<v
     const duration = (Date.now() - startTime) / 1000;
     recordEventDuration(event.type, duration);
     
-    logger.error(`[Event Error] Failed to handle ${event.type}:`, error instanceof Error ? error.message : 'Unknown error');
+    logger.error(`[Event Error] Failed to handle ${event.type}:`, {
+      correlationId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     // Issue #54: Store in Dead-Letter Queue
-    await DeadLetterQueue.add(event, error instanceof Error ? error.message : 'Unknown error');
+    await DeadLetterQueue.add(eventWithCorrelation, error instanceof Error ? error.message : 'Unknown error');
     throw error; // Rethrow so transaction can rollback if running inside one
   }
+  });
 }
 
 /**

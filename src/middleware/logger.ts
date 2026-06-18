@@ -7,9 +7,10 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
   res.on('finish', () => {
     const duration = Date.now() - start
     logger.info(`${req.method} ${req.path}`, {
+      correlationId: req.correlationId,
       status: res.statusCode,
       duration: `${duration}ms`,
-      ip: req.ip
+      ip: req.ip,
     })
   })
 

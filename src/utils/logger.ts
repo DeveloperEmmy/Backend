@@ -1,6 +1,7 @@
 import winston from 'winston'
 import * as fs from 'fs'
 import * as path from 'path'
+import { getCorrelationId } from './correlation'
 
 // Ensure logs directory exists with fail-safe handling
 const logsDir = path.join(process.cwd(), 'logs')
@@ -37,6 +38,15 @@ function redactSensitiveData(message: string): string {
   }
   return redacted
 }
+
+// Inject correlation ID from AsyncLocalStorage when present
+const correlationFormat = winston.format((info) => {
+  const correlationId = getCorrelationId()
+  if (correlationId && !info.correlationId) {
+    info.correlationId = correlationId
+  }
+  return info
+})
 
 // Custom format that redacts sensitive data
 const redactFormat = winston.format.printf(({ timestamp, level, message, ...meta }) => {
@@ -98,9 +108,18 @@ if (fs.existsSync(logsDir) && fs.statSync(logsDir).isDirectory()) {
 
 export const logger = winston.createLogger({
   level: logLevel,
-  format: winston.format.combine(winston.format.timestamp(), redactFormat),
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    correlationFormat(),
+    redactFormat
+  ),
   transports,
 })
+
+/** Child logger with a fixed correlationId (e.g. background jobs). */
+export function createCorrelatedLogger(correlationId: string): winston.Logger {
+  return logger.child({ correlationId })
+}
 
 // Optional cloud logging adapters (disabled by default)
 export function addCloudLoggingAdapter(adapter: winston.transport): void {

@@ -3,6 +3,7 @@ import db from '../db'
 import { depositForUser, withdrawForUser } from '../stellar/contract'
 import { formatDepositReply, formatWithdrawReply } from '../whatsapp/formatters'
 import { sendNotFound, sendConflict, sendUnauthorized } from '../utils/errors'
+import { logger } from '../utils/logger'
 
 export async function processOnChainTransaction(
   req: Request,
@@ -24,12 +25,29 @@ export async function processOnChainTransaction(
   }
 
   const onChainFn = type === 'DEPOSIT' ? depositForUser : withdrawForUser
+
+  logger.info('Submitting on-chain transaction', {
+    correlationId: req.correlationId,
+    type,
+    userId,
+    amount,
+    assetSymbol,
+  })
+
   const onChainTransaction = await onChainFn(
     userId,
     req.auth!.walletAddress,
     amount,
     assetSymbol
   )
+
+  logger.info('On-chain transaction completed', {
+    correlationId: req.correlationId,
+    type,
+    userId,
+    txHash: onChainTransaction.hash,
+    status: onChainTransaction.status,
+  })
 
   const transactionStatus = onChainTransaction.status === 'success' ? 'CONFIRMED' : 'FAILED'
 

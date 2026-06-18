@@ -62,7 +62,7 @@ function buildCorsOptions(): CorsOptions {
 
     // Standard safe headers; expand as your API needs grow
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Token', 'X-Request-ID'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Token', 'X-Request-ID', 'X-Correlation-ID'],
     exposedHeaders: ['X-Request-ID'],
     credentials: true,
     // Pre-flight cache: 2 hours in production, no cache in dev

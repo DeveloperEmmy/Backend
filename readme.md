@@ -109,7 +109,24 @@ Public unauthenticated read endpoints (`/api/protocols/*`, `/api/vault/state`, `
 
 **Bypass (trusted services only):** set `TRUSTED_IPS` to a comma-separated allowlist of IPs, or send the shared secret in the `X-Internal-Token` header (`INTERNAL_SERVICE_TOKEN`). Mount order matters: the bypass middleware runs before limiters in `src/index.ts`.
 
-For production secret handling, migrations, and rollback steps see `docs/DEPLOYMENT_PRODUCTION.md`.
+For production secret handling, migrations, and rollback steps see `docs/DEPLOYMENT.md` and `docs/DEPLOYMENT_PRODUCTION.md`.
+
+Request tracing
+---------------
+Every API response includes an `X-Request-ID` header for correlating logs across HTTP handlers, Stellar event processing, DLQ entries, and agent actions.
+
+- **Send your own ID:** include `X-Request-ID` or `X-Correlation-ID` on any request (alphanumeric, hyphen, underscore; max 128 characters). Invalid values are replaced with a server-generated UUID.
+- **Response header:** `X-Request-ID` is always returned on success and error responses.
+- **Error JSON:** 500 responses include `"requestId": "<uuid>"` alongside the error message.
+- **Logs:** structured log entries include `correlationId` when a request or background job context is active.
+
+Example:
+
+```bash
+curl -v -H "X-Request-ID: my-deposit-attempt-001" \
+  https://api.neurowealth.io/api/deposit ...
+# Response header: X-Request-ID: my-deposit-attempt-001
+```
 
 Testing
 -------
