@@ -4,6 +4,7 @@
 
 import cron, { ScheduledTask } from 'node-cron';
 import { logger } from '../utils/logger';
+import { generateCorrelationId, runWithCorrelationIdAsync } from '../utils/correlation';
 import { scanAllProtocols } from './scanner';
 import { executeRebalanceIfNeeded, getThresholds, logAgentAction } from './router';
 import { captureAllUserBalances, cleanupOldSnapshots } from './snapshotter';
@@ -64,11 +65,13 @@ function getNextCheckTime(): Date {
  * Main rebalance check job - runs every hour at :00
  */
 async function rebalanceCheckJob(): Promise<void> {
+  const correlationId = generateCorrelationId();
+  return runWithCorrelationIdAsync(correlationId, async () => {
   const jobName = 'Hourly Rebalance Check';
   const startTime = Date.now();
 
   try {
-    logger.info(`${jobName} started`);
+    logger.info(`${jobName} started`, { correlationId });
     // Update heartbeat
     updateAgentHeartbeat();
 
@@ -125,9 +128,7 @@ async function rebalanceCheckJob(): Promise<void> {
     const duration = Date.now() - startTime;
 
     await logAgentAction('ANALYZE', 'SUCCESS', {
-      positionsChecked: positions.length,
-      rebalancesTriggered,
-      duration,
+      input: { correlationId, positionsChecked: positions.length, rebalancesTriggered, duration },
     });
 
     // Record Prometheus metrics
@@ -156,20 +157,24 @@ async function rebalanceCheckJob(): Promise<void> {
     recordDbOperation('rebalance_check', duration / 1000);
 
     await logAgentAction('ANALYZE', 'FAILED', {
+      input: { correlationId },
       error: errorMessage,
     });
   }
+  });
 }
 
 /**
  * Snapshot job - runs every hour at :30
  */
 async function snapshotJob(): Promise<void> {
+  const correlationId = generateCorrelationId();
+  return runWithCorrelationIdAsync(correlationId, async () => {
   const jobName = 'Hourly Balance Snapshot';
   const startTime = Date.now();
 
   try {
-    logger.info(`${jobName} started`);
+    logger.info(`${jobName} started`, { correlationId });
     // Update heartbeat
     updateAgentHeartbeat();
 
@@ -204,6 +209,7 @@ async function snapshotJob(): Promise<void> {
     // Record Prometheus metrics
     recordDbOperation('snapshot_job', duration / 1000);
   }
+  });
 }
 
 /**
@@ -243,18 +249,30 @@ export async function startAgentLoop(): Promise<void> {
 
     // Daily protocol scan at 2 AM
     const scanJob = cron.schedule('0 2 * * *', async () => {
+      const correlationId = generateCorrelationId();
+      return runWithCorrelationIdAsync(correlationId, async () => {
       try {
-        logger.info('Daily protocol scan started');
+        logger.info('Daily protocol scan started', { correlationId });
         updateAgentHeartbeat();
         const protocols = await scanAllProtocols();
+        await logAgentAction('SCAN', 'SUCCESS', {
+          input: { correlationId, protocolsScanned: protocols.length },
+        });
         logger.info('Daily protocol scan complete', {
+          correlationId,
           protocolsScanned: protocols.length,
         });
       } catch (error) {
         logger.error('Daily protocol scan failed', {
+          correlationId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        await logAgentAction('SCAN', 'FAILED', {
+          input: { correlationId },
           error: error instanceof Error ? error.message : 'Unknown error',
         });
       }
+      });
     });
     cronJobs.push(scanJob);
     logger.info('✓ Daily protocol scan scheduled: Daily at 2 AM');
