@@ -18,6 +18,13 @@ const register = new client.Registry()
 // Add default metrics (CPU, memory, etc.)
 client.collectDefaultMetrics({ register })
 
+// ── Global default label: env ────────────────────────────────────────────────
+// Every metric emitted through this registry will carry `env` automatically,
+// satisfying the acceptance criterion without modifying every Counter/Histogram.
+register.setDefaultLabels({
+  env: process.env.NODE_ENV || 'development',
+})
+
 // ── Event Processing Metrics ─────────────────────────────────────────────────────
 
 export const eventsProcessedTotal = new client.Counter({
@@ -175,6 +182,32 @@ export const analyticsRequestDuration = new client.Histogram({
   registers: [register],
 })
 
+// ── Background Job Metrics ──────────────────────────────────────────────────
+
+export const backgroundJobsTotal = new client.Counter({
+  name: 'background_jobs_total',
+  help: 'Total number of background job executions',
+  labelNames: ['job', 'status'] as const,
+  registers: [register],
+})
+
+export const backgroundJobDuration = new client.Histogram({
+  name: 'background_job_duration_seconds',
+  help: 'Duration of background job executions in seconds',
+  labelNames: ['job'] as const,
+  buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60],
+  registers: [register],
+})
+
+// ── External Service Error Metrics ──────────────────────────────────────────
+
+export const externalServiceErrorsTotal = new client.Counter({
+  name: 'external_service_errors_total',
+  help: 'Total number of external service errors',
+  labelNames: ['service', 'error_type'] as const,
+  registers: [register],
+})
+
 // ── Helper Functions ─────────────────────────────────────────────────────────────
 
 /**
@@ -282,6 +315,28 @@ export function recordAnalyticsRequest(
 ): void {
   analyticsRequestsTotal.inc({ endpoint, status })
   analyticsRequestDuration.observe({ endpoint }, durationSeconds)
+}
+
+/**
+ * Record a background job execution
+ */
+export function recordBackgroundJob(
+  job: string,
+  status: 'success' | 'failed',
+  durationSeconds: number
+): void {
+  backgroundJobsTotal.inc({ job, status })
+  backgroundJobDuration.observe({ job }, durationSeconds)
+}
+
+/**
+ * Record an external service error
+ */
+export function recordExternalServiceError(
+  service: string,
+  errorType: string
+): void {
+  externalServiceErrorsTotal.inc({ service, error_type: errorType })
 }
 
 /**
