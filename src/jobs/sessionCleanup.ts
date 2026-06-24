@@ -1,5 +1,6 @@
 import db from '../db';
-import { logger } from '../utils/logger';
+import { logger, logBackgroundJob } from '../utils/logger';
+import { generateCorrelationId, runWithCorrelationIdAsync, getCorrelationId } from '../utils/correlation';
 import { config } from '../config/env';
 import { recordBackgroundJob } from '../utils/metrics';
 
@@ -8,21 +9,33 @@ import { recordBackgroundJob } from '../utils/metrics';
  * Safe to call multiple times — it is idempotent.
  */
 export async function cleanupExpiredSessions(): Promise<void> {
-  const startTime = Date.now();
-  try {
-    const result = await db.session.deleteMany({
-      where: { expiresAt: { lt: new Date() } },
-    });
-    const duration = (Date.now() - startTime) / 1000;
-    if (result.count > 0) {
-      logger.info(`[SessionCleanup] Removed ${result.count} expired session(s)`);
+  const correlationId = generateCorrelationId();
+  return runWithCorrelationIdAsync(correlationId, async () => {
+    const startTime = Date.now();
+    const jobName = 'session_cleanup';
+
+    try {
+      const result = await db.session.deleteMany({
+        where: { expiresAt: { lt: new Date() } },
+      });
+      const duration = (Date.now() - startTime) / 1000;
+
+      logBackgroundJob(jobName, 'success', duration, correlationId, {
+        rowsDeleted: result.count,
+      });
+
+      recordBackgroundJob(jobName, 'success', duration);
+    } catch (error) {
+      const duration = (Date.now() - startTime) / 1000;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      logBackgroundJob(jobName, 'failed', duration, correlationId, {
+        error: errorMessage,
+      });
+
+      recordBackgroundJob(jobName, 'failed', duration);
     }
-    recordBackgroundJob('session_cleanup', 'success', duration);
-  } catch (error) {
-    const duration = (Date.now() - startTime) / 1000;
-    logger.error('[SessionCleanup] Failed to clean up sessions:', error);
-    recordBackgroundJob('session_cleanup', 'failed', duration);
-  }
+  });
 }
 
 /**
